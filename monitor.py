@@ -4,7 +4,7 @@ import time
 import random
 
 # The URL of our Flask API
-API_URL = "http://127.0.0.1:5000/predict"
+API_URL = "http://172.22.20.57:5000/predict"
 
 # Sample data to simulate network traffic
 sample_ips = ["192.168.1.10", "10.0.5.80", "172.16.31.5", "192.168.1.25"]
