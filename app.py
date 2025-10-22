@@ -13,31 +13,39 @@ TABLE_NAME = "traffic_logs"
 model = joblib.load('nac_model.joblib')
 ip_encoder = joblib.load('ip_encoder.joblib')
 proto_encoder = joblib.load('proto_encoder.joblib')
-print("Model and encoders loaded.")
+label_encoder = joblib.load('label_encoder.joblib')
+
+
+# --- MODIFIED: Function now ONLY clears the database ---
+def initialize_database():
+    """Wipes the existing logs so the session starts fresh."""
+    print("Initializing database for a new session...")
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+
+    # Delete all existing records from the table
+    cursor.execute(f"DELETE FROM {TABLE_NAME};")
+    # Optional: Reset the autoincrement counter
+    cursor.execute(f"DELETE FROM sqlite_sequence WHERE name='{TABLE_NAME}';")
+    print(f"Cleared all previous records from '{TABLE_NAME}'. Database is now empty.")
+
+    conn.commit()
+    conn.close()
+    print("Database initialization complete.")
+
 
 def log_to_database(data, decision):
     """Saves the traffic data and the model's decision to the database."""
     conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    
     query = f"""
         INSERT INTO {TABLE_NAME} (timestamp, source_ip, dest_ip, source_port, dest_port, protocol, packet_count, decision)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     """
-    
-    # Get current timestamp
     timestamp = datetime.now().isoformat()
     
-    # Execute the query
-    cursor.execute(query, (
-        timestamp,
-        data['source_ip'],
-        data['dest_ip'],
-        data['source_port'],
-        data['dest_port'],
-        data['protocol'],
-        data['packet_count'],
-        decision
+    conn.execute(query, (
+        timestamp, data['source_ip'], data['dest_ip'], data['source_port'],
+        data['dest_port'], data['protocol'], data['packet_count'], decision
     ))
     
     conn.commit()
@@ -54,18 +62,21 @@ def predict():
         df['dest_ip_encoded'] = ip_encoder.transform(df['dest_ip'])
         df['protocol_encoded'] = proto_encoder.transform(df['protocol'])
     except Exception:
-        # If an IP/protocol is unseen, deny it and log it for future training
         decision = 'denied'
         log_to_database(data, decision)
         return jsonify({'prediction': decision, 'reason': 'Unseen IP or Protocol'})
 
     features = ['source_ip_encoded', 'dest_ip_encoded', 'source_port', 'dest_port', 'protocol_encoded', 'packet_count']
-    prediction = model.predict(df[features])[0]
+    prediction_encoded = model.predict(df[features])[0]
     
-    # Log the request and its outcome to the database
+    # Decode the prediction back to 'allowed' or 'denied'
+    prediction = label_encoder.inverse_transform([prediction_encoded])[0]
+    
     log_to_database(data, prediction)
     
     return jsonify({'prediction': prediction})
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=False) # Turned debug off for cleaner logging
+    initialize_database()
+    print("Model and encoders loaded. Starting Flask server.")
+    app.run(host='0.0.0.0', port=5000, debug=False)
