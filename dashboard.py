@@ -51,12 +51,8 @@ else:
             return pd.DataFrame()
 
     st.title("🛡️ Live Network Access Control Dashboard")
-
     df = load_data()
 
-    # --- REMOVED: Filter options are no longer needed ---
-
-    # --- UPDATED: Simplified the filter area ---
     st.header("Live Traffic Filter")
     st.text_input(
         "Filter by Source IP:", 
@@ -66,12 +62,26 @@ else:
 
     df_display = df.copy()
 
-    # --- UPDATED: Removed filtering logic for protocol and decision ---
     if st.session_state.source_ip_filter.strip():
         df_display = df_display[df_display['source_ip'] == st.session_state.source_ip_filter.strip()]
 
+    # --- NEW: Function to apply color styling ---
+    def color_decision(val):
+        """
+        Takes a string and returns a color style.
+        'denied' will be red, 'allowed' will be green.
+        """
+        color = 'red' if val == 'denied' else 'green' if val == 'allowed' else 'white'
+        return f'color: {color}'
+
     st.header("Real-time Traffic Logs")
-    st.dataframe(df_display)
+    
+    # Apply the styling function to the 'decision' column
+    styled_df = df_display.style.applymap(color_decision, subset=['decision'])
+    
+    # Display the styled DataFrame
+    st.dataframe(styled_df)
+
 
     st.header("Filtered Analytics")
 
